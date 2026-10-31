@@ -1,12 +1,17 @@
 {% extends "base.html" %}{% block body %}
-<section class="card"><h2>New research brief</h2>
-<p class="muted">Describe a market and/or name competitors (names or domains). The desk resolves canonical Crustdata identities, gathers cited evidence, ranks developments for a Corporate Strategy lead and a VC partner, and sets up a shared Watcher.</p>
-<textarea id="brief" rows="4" placeholder="e.g. Build an ongoing intelligence brief on the AI customer-support software market and these competitors: Intercom, Zendesk, Sierra. Track hiring, leadership, funding and company changes. Show what matters to Corporate Strategy and to a VC Investment Partner."></textarea>
-<button id="go" class="primary">Run research</button> <span id="msg" class="muted"></span></section>
-<section class="card"><h2>Recent requests</h2><table><tr><th>#</th><th>Brief</th><th>Status</th><th>Planner</th></tr>
-{% for r in reqs %}<tr><td><a href="/requests/{{ r.id }}">{{ r.id }}</a></td><td><a href="/requests/{{ r.id }}">{{ r.brief_text[:140] }}</a></td>
-<td><span class="pill s-{{ r.status }}">{{ r.status }}</span></td><td class="muted">{{ r.planner_mode }}</td></tr>{% endfor %}</table></section>
-<script>document.getElementById('go').onclick=async()=>{const b=document.getElementById('brief').value;const m=document.getElementById('msg');m.textContent='Submitting…';
-const r=await fetch('/api/requests',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({brief:b})});const j=await r.json();
-if(!r.ok){m.textContent=j.detail||'error';return;}location.href=j.url;};</script>
+<section class="card hero"><h1>What should your stakeholders know about this market?</h1>
+<p>Describe a market and name competitors (domains resolve most precisely). The desk resolves canonical Crustdata identities, gathers cited evidence, ranks each development for every stakeholder, and sets up shared Watcher monitoring.</p>
+<textarea id="brief" placeholder="e.g. Track the AI coding assistant market: cursor.com, Cognition (cognition.ai) and replit.com. Hiring, leadership, funding, launches and partnerships. Brief Strategy, a VC partner, R&D, Sales and Recruiting."></textarea>
+<div class="chips"><span class="muted small" style="color:#9fb0d6">Stakeholders scored:</span>{% for p in personas %}<span class="pill">{{ p }}</span>{% endfor %}</div>
+<button id="go" class="primary">Run research</button> <span id="msg" class="small"></span>
+<div class="steps"><div><b>1 · Resolve</b>Crustdata Identify / Search</div><div><b>2 · Evidence</b>Enrich · Jobs · People · Web</div><div><b>3 · Events</b>claims, dedupe, provenance</div><div><b>4 · Stakeholders</b>persona policy scoring</div><div><b>5 · Brief</b>cited intelligence</div><div><b>6 · Monitor</b>shared Watcher</div></div></section>
+<section class="card"><h2>Recent research</h2><table><tr><th>#</th><th>Brief</th><th>Status</th><th>Planner</th><th>When (UTC)</th></tr>
+{% for r in reqs %}<tr><td><a href="/requests/{{ r.id }}">{{ r.id }}</a></td><td><a href="/requests/{{ r.id }}">{{ r.brief_text[:150] }}</a></td>
+<td><span class="pill s-{{ r.status }}">{{ r.status }}</span></td><td class="muted small">{{ r.planner_mode }}</td><td class="muted small">{{ r.created_at.strftime('%d %b %H:%M') if r.created_at else '' }}</td></tr>
+{% else %}<tr><td colspan="5" class="muted">No research yet — submit a brief above.</td></tr>{% endfor %}</table></section>
+<script>document.getElementById('go').onclick=async()=>{const b=document.getElementById('brief').value.trim();const m=document.getElementById('msg');const btn=document.getElementById('go');
+if(b.length<8){m.className='small err';m.textContent='Describe the market and/or name companies.';return;}
+btn.disabled=true;m.className='small';m.textContent='Submitting…';
+try{const r=await fetch('/api/requests',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({brief:b})});const j=await r.json();
+if(!r.ok){throw new Error(j.detail||'Request failed');}location.href=j.url;}catch(e){m.className='small err';m.textContent=e.message;btn.disabled=false;}};</script>
 {% endblock %}

@@ -48,7 +48,8 @@ def health():
 def index(request: HttpRequest):
     with SessionLocal() as db:
         reqs = list(db.scalars(select(Request).order_by(Request.id.desc()).limit(15)))
-        return templates.TemplateResponse("index.html", {"request": request, "reqs": reqs, "modes": modes()})
+        return templates.TemplateResponse("index.html", {"request": request, "reqs": reqs, "modes": modes(),
+                                                         "personas": [p["label"] for p in pol.PERSONAS.values()]})
 
 
 def _run(rid: int):
@@ -98,6 +99,10 @@ def _req_view(db, rid: int) -> dict:
         personas[pid] = {"label": meta["label"], "pv": pv, "rows": rows, "brief": brief,
                          "versions": list(db.scalars(select(PolicyVersion).where(PolicyVersion.persona_id == pid)
                                                      .order_by(PolicyVersion.version.desc())))}
+    # Stakeholder matrix: the same shared events, scored under every persona's active policy.
+    score_map = {pid: {r["event"].id: r["a"] for r in p["rows"]} for pid, p in personas.items()}
+    top = sorted(events, key=lambda e: -max((score_map[pid][e.id].score for pid in personas), default=0))[:8]
+    matrix = [{"event": e, "cells": [{"pid": pid, "a": score_map[pid][e.id]} for pid in personas]} for e in top]
     watch = db.scalar(select(Watch).where(Watch.request_id == rid).order_by(Watch.id.desc()))
     if watch is None:
         watch = db.scalar(select(Watch).where(Watch.crustdata_watch_id.is_not(None)).order_by(Watch.id.desc()))
@@ -107,7 +112,8 @@ def _req_view(db, rid: int) -> dict:
                                 .order_by(LlmCall.id)))
     steps = list(db.scalars(select(RunStep).where(RunStep.request_id == rid).order_by(RunStep.id)))
     proposals = list(db.scalars(select(Proposal).order_by(Proposal.id.desc()).limit(10)))
-    return {"req": req, "ents": ents, "events": events, "evidence": evidence, "claims": claims, "personas": personas,
+    return {"matrix": matrix, "resolved_n": sum(e.resolution == "resolved" for e in ents),
+            "req": req, "ents": ents, "events": events, "evidence": evidence, "claims": claims, "personas": personas,
             "watch": watch, "envs": envs, "calls": calls, "llm_calls": llm_calls, "steps": steps, "proposals": proposals,
             "credits_used": round(sum(c.credits_used or 0 for c in calls), 3),
             "llm_cost": round(sum(c.est_cost_usd for c in llm_calls), 4),
