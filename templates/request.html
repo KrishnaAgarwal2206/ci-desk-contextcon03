@@ -1,0 +1,81 @@
+{% extends "base.html" %}{% block title %}Request {{ req.id }} · CI Desk{% endblock %}{% block body %}
+<section class="card"><div class="row"><h2>Request #{{ req.id }}</h2><span class="pill s-{{ req.status }}" id="status" data-status="{{ req.status }}" data-rid="{{ req.id }}">{{ req.status }}</span></div>
+<blockquote>{{ req.brief_text }}</blockquote>
+<div class="grid2"><div><h3>Research plan <span class="tag">{{ req.planner_mode or 'planning…' }}</span></h3>
+<pre>{{ json.dumps(req.plan, indent=1) }}</pre></div>
+<div><h3>Notes, failures &amp; unknowns</h3>{% if req.notes %}<ul>{% for n in req.notes %}<li class="warnline">{{ n }}</li>{% endfor %}</ul>{% else %}<p class="muted">None.</p>{% endif %}
+<p class="muted">Crustdata balance: before {{ req.credits_before if req.credits_before is not none else 'n/a' }} · after {{ req.credits_after if req.credits_after is not none else 'n/a' }} · this run (X-Credits-Used) {{ credits_used }}</p></div></div></section>
+
+<section class="card"><h2>1 · Canonical companies (Crustdata Identify / Search)</h2>
+<table><tr><th>Input</th><th>Resolution</th><th>Crustdata ID</th><th>Name / domain</th><th>Confidence</th><th>How</th><th>Alternatives</th></tr>
+{% for e in ents %}<tr><td>{{ e.query }}</td><td><span class="pill r-{{ e.resolution }}">{{ e.resolution }}</span></td><td><code>{{ e.crustdata_id or '—' }}</code></td>
+<td>{{ e.name }} <span class="muted">{{ e.domain }}</span></td><td>{{ e.confidence if e.confidence is not none else '—' }}</td><td class="muted small">{{ e.resolved_via }}</td>
+<td class="small">{% for a in e.alternatives[:4] %}<div>{{ a.name }} <code>{{ a.crustdata_company_id }}</code> <span class="muted">{{ a.domain }} · {{ a.employee_count_range }} · {{ a.confidence }}</span>{% if e.resolution=='ambiguous' %} <button class="choose small" data-e="{{ e.id }}" data-c="{{ a.crustdata_company_id }}">use this</button>{% endif %}</div>{% endfor %}</td></tr>
+{% else %}<tr><td colspan="7" class="muted">No entities yet.</td></tr>{% endfor %}</table></section>
+
+<section class="card"><div class="row"><h2>2 · Intelligence brief</h2>
+<div class="tabs">{% for pid, p in personas.items() %}<button class="tab {{ 'on' if loop.first }}" data-p="{{ pid }}">{{ p.label }} <span class="tag">policy v{{ p.pv.version }}</span></button>{% endfor %}</div></div>
+{% for pid, p in personas.items() %}<div class="persona" data-p="{{ pid }}" {% if not loop.first %}hidden{% endif %}>
+{% if p.brief %}<p><span class="tag">{{ p.brief.mode }}</span> <span class="tag">summary: {{ p.brief.body.summary_kind }}</span> <span class="tag">brief built on policy v{{ p.brief.body.policy_version }}</span></p>
+<p class="summary">{{ p.brief.body.summary }}</p>{% else %}<p class="muted">Brief not generated yet.</p>{% endif %}
+<h3>Ranked developments (current policy v{{ p.pv.version }}) — same shared events, persona-specific scores</h3>
+<table class="events"><tr><th>#</th><th>Development</th><th>Category</th><th>Score</th><th>Why it matters <span class="tag">inference</span></th><th>Evidence</th></tr>
+{% for row in p.rows %}{% set e=row.event %}{% set a=row.a %}<tr class="{{ 'supp' if a.suppressed else ('alert' if a.above_threshold else '') }}">
+<td>{{ loop.index }}</td><td><b>{{ e.title }}</b>{% for c in claims.get(e.id, [])[:3] %}<div class="fact"><span class="tag k-{{ c.kind }}">{{ c.kind }}</span> {{ c.text }}</div>{% endfor %}
+<details><summary class="small">score breakdown</summary><pre class="small">{{ json.dumps(a.components, indent=1) }}</pre></details></td>
+<td>{{ e.category }}{% if e.origin=='watcher' %}<div class="tag">watcher</div>{% endif %}</td>
+<td><b>{{ '%.3f'|format(a.score) }}</b>{% if a.suppressed %}<div class="tag">suppressed</div>{% elif a.above_threshold %}<div class="tag ok">alert</div>{% endif %}</td>
+<td class="small">{% set f = (p.brief.body.findings|selectattr('event_id','equalto',e.id)|first) if p.brief else none %}{{ f.why_it_matters if f else '' }}{% if f %}<div class="muted">{{ f.why_source }}</div>{% endif %}</td>
+<td class="small">{% for eid in e.evidence_ids[:4] %}<a href="#ev{{ eid }}">E{{ eid }}</a> {% endfor %}{% if e.evidence_ids|length > 4 %}+{{ e.evidence_ids|length - 4 }}{% endif %}</td></tr>
+{% else %}<tr><td colspan="6" class="muted">No evidence-backed developments. Nothing is shown without evidence.</td></tr>{% endfor %}</table>
+{% if p.brief and p.brief.body.unknowns %}<h3>Unknowns / gaps</h3><ul>{% for u in p.brief.body.unknowns %}<li class="muted">{{ u }}</li>{% endfor %}</ul>{% endif %}
+<h3>Policy versions</h3><table><tr><th>v</th><th>Active</th><th>By</th><th>From proposal</th><th>Rules</th></tr>{% for v in p.versions %}<tr><td>{{ v.version }}</td><td>{{ '✔' if v.is_active }}</td><td>{{ v.created_by }}</td><td>{{ v.source_proposal_id or '' }}</td><td class="small">{{ v.body.rules|map(attribute='when')|map(attribute='category')|join(', ') }}</td></tr>{% endfor %}</table>
+{% if p.versions|length > 1 %}<button class="rollback" data-p="{{ pid }}" data-v="{{ p.versions[1].version }}">Roll back to v{{ p.versions[1].version }} (creates new version)</button>{% endif %}
+</div>{% endfor %}</section>
+
+<section class="card"><h2>3 · Governed feedback → policy proposal</h2>
+<div class="row"><select id="fb-persona">{% for pid, p in personas.items() %}<option value="{{ pid }}" {{ 'selected' if pid=='vc_partner' }}>{{ p.label }}</option>{% endfor %}</select>
+<input id="reviewer" placeholder="Reviewer name" value=""></div>
+<textarea id="fb" rows="3">For the VC Partner persona, suppress routine junior hiring alerts. Prioritize senior leadership changes, funding, founder moves and GTM expansion. Do not lower the evidence threshold.</textarea>
+<button id="fb-go" class="primary">Create proposal (does not change policy)</button><span id="fb-msg" class="muted"></span>
+{% for pr in proposals %}<div class="proposal"><div class="row"><b>Proposal #{{ pr.id }}</b> <span class="pill p-{{ pr.state }}">{{ pr.state }}</span>
+<span class="tag">{{ pol_label if false }}{{ pr.persona_id }}</span><span class="tag">parser: {{ pr.parser }}</span><span class="tag">risk: {{ pr.risk }}</span>
+{% if pr.requires_credit_approval %}<span class="tag warn">needs separate credit approval</span>{% endif %}</div>
+<div class="muted small">“{{ pr.feedback_text }}”</div>
+{% if pr.validation.errors %}<ul>{% for e in pr.validation.errors %}<li class="warnline">{{ e }}</li>{% endfor %}</ul>{% endif %}
+{% for w in pr.validation.warnings or [] %}<div class="small muted">⚠ {{ w }}</div>{% endfor %}
+<div class="grid2"><div><h4>Diff</h4><ul class="small">{% for w in pr.diff.weights or [] %}<li>{{ w.category }}: {{ w.before }} → <b>{{ w.after }}</b></li>{% endfor %}
+{% for r in pr.diff.rules_added or [] %}<li>+ rule: <b>{{ r }}</b></li>{% endfor %}{% for o in pr.diff.other or [] %}<li>{{ o.field }}: {{ o.before }} → {{ o.after }}</li>{% endfor %}
+<li class="muted">guardrails: global min sources {{ pr.validation.guardrails.global_min_sources if pr.validation.guardrails }} · provenance required · unchanged{% if 'min_sources_unchanged' in pr.body.guardrail_assertions %} (asserted by feedback){% endif %}</li></ul></div>
+<div><h4>Replay on {{ pr.replay.events_replayed or 0 }} stored events</h4>{% if pr.replay.changed %}<p class="small">alerts {{ pr.replay.alerts_before }} → {{ pr.replay.alerts_after }}</p>
+<table class="small"><tr><th>Event</th><th>Rank</th><th>Score</th></tr>{% for c in pr.replay.changed[:8] %}<tr><td>{{ c.title }}</td><td>{{ c.rank_before }} → {{ c.rank_after }}</td><td>{{ c.score_before }} → {{ c.score_after }}{% if c.suppressed_after %} (suppressed){% endif %}</td></tr>{% endfor %}</table>
+{% else %}<p class="muted small">No ranking change on stored events.</p>{% endif %}</div></div>
+{% if pr.state=='pending_review' %}<button class="approve primary" data-id="{{ pr.id }}" data-risk="{{ pr.risk }}">Approve → new {{ pr.persona_id }} version</button> <button class="reject" data-id="{{ pr.id }}">Reject</button>{% endif %}
+{% if pr.reviewer %}<span class="muted small">decided by {{ pr.reviewer }}</span>{% endif %}</div>{% endfor %}</section>
+
+<section class="card"><h2>4 · Shared Watcher (ongoing monitoring)</h2>
+{% if watch %}<div class="grid2"><div><p>Crustdata watch ID <code>{{ watch.crustdata_watch_id or '—' }}</code> · status <b>{{ watch.status }}</b> · delivery <b>{{ watch.delivery }}</b></p>
+<p class="small">Schedule: every {{ watch.definition.config.trigger.every_hours }} h · max {{ watch.definition.config.max_results_per_run }} results/run · freshness SLA: {{ watch.readback.config.refresh_frequency_days if watch.readback and watch.readback.config else '30' }} days (company entity watch: 30-day only). <b>Scheduled monitoring — not real time.</b></p>
+<p class="small">Baseline: first run is a free before-snapshot (sample ≤5, no changes) — not history. last_run_at: {{ watch.readback.last_run_at if watch.readback else 'n/a' }}. The brief above came from Identify/Enrich/Job/Person/Web calls.</p>
+{% if watch.error %}<p class="warnline">{{ watch.error }}</p>{% endif %}
+{% if watch.crustdata_watch_id %}<button id="reconcile" data-id="{{ watch.id }}">Reconcile run history</button> {% if watch.delivery=='webhook' %}<button id="wtest" data-id="{{ watch.id }}">Send free test notification</button>{% endif %}{% endif %} <span id="w-msg" class="muted small"></span>
+{% if watch.runs %}<table class="small"><tr><th>Run</th><th>Status</th><th>New</th><th>Credits</th><th>Delivery HTTP</th></tr>{% for r in watch.runs[:5] %}<tr><td>{{ r.id }}</td><td>{{ r.status }}</td><td>{{ r.new_records_count }}</td><td>{{ r.credits_deducted }}</td><td>{{ r.notification_http_status }}</td></tr>{% endfor %}</table>{% endif %}</div>
+<div><details><summary class="small">definition sent</summary><pre class="small">{{ json.dumps(watch.definition, indent=1) }}</pre></details>
+<details><summary class="small">read-back from GET /watch/company/{id}</summary><pre class="small">{{ json.dumps(watch.readback, indent=1) }}</pre></details></div></div>
+{% else %}<p class="muted">No watch created (needs ≥1 resolved company and a configured Crustdata key).</p>{% endif %}
+<h3>Recent Watcher envelopes</h3><table class="small"><tr><th>#</th><th>Watch</th><th>Notification</th><th>State</th><th>Via</th></tr>
+{% for e in envs %}<tr><td>{{ e.id }}</td><td>{{ e.crustdata_watch_id }}</td><td>{{ e.notification_id }}</td><td><span class="pill">{{ e.state }}</span>{% if e.is_test %} <span class="tag warn">TEST — not a business event</span>{% endif %}</td><td>{{ e.via }}</td></tr>
+{% else %}<tr><td colspan="5" class="muted">None received yet.</td></tr>{% endfor %}</table></section>
+
+<section class="card"><h2>5 · Evidence ({{ evidence|length }} records)</h2>
+<table class="small"><tr><th>ID</th><th>Source</th><th>Record / URL</th><th>Excerpt / field value</th><th>Source date</th><th>Retrieved</th></tr>
+{% for id, ev in evidence.items() %}<tr id="ev{{ id }}"><td>E{{ id }}</td><td>{{ ev.source_type }}</td><td>{% if ev.source_url %}<a href="{{ ev.source_url }}" target="_blank" rel="noopener">{{ ev.source_url[:60] }}</a><br>{% endif %}<code>{{ ev.record_ref }}</code></td>
+<td>{{ ev.excerpt[:220] }}</td><td>{{ ev.source_ts[:10] }}</td><td>{{ ev.retrieved_at.strftime('%H:%M:%S') }}</td></tr>{% endfor %}</table></section>
+
+<section class="card"><h2>6 · Execution trace</h2><div class="grid2"><div>
+<h3>Stages</h3><table class="small"><tr><th>Stage</th><th>Status</th><th>ms</th><th>Detail</th></tr>{% for s in steps %}<tr><td>{{ s.stage }}</td><td>{{ s.status }}</td><td>{{ s.duration_ms }}</td><td>{{ s.detail }}</td></tr>{% endfor %}</table>
+<h3>Anthropic usage <span class="tag">${{ llm_cost }} this view · ${{ llm_total }} app total (cap ${{ '%.2f'|format(5) }})</span></h3>
+<table class="small"><tr><th>Task</th><th>Outcome</th><th>In</th><th>Out</th><th>Est. $</th><th>ms</th></tr>{% for c in llm_calls %}<tr><td>{{ c.task }}</td><td>{{ c.outcome }}</td><td>{{ c.input_tokens }}</td><td>{{ c.output_tokens }}</td><td>{{ '%.4f'|format(c.est_cost_usd) }}</td><td>{{ c.duration_ms }}</td></tr>{% else %}<tr><td colspan="6" class="muted">No LLM calls (deterministic mode).</td></tr>{% endfor %}</table></div>
+<div><h3>Crustdata calls <span class="tag">{{ credits_used }} credits (X-Credits-Used)</span></h3>
+<table class="small"><tr><th>Stage</th><th>Endpoint</th><th>HTTP</th><th>Outcome</th><th>n</th><th>Credits</th><th>ms</th></tr>{% for c in calls %}<tr><td>{{ c.stage }}</td><td>{{ c.method }} {{ c.endpoint }}</td><td>{{ c.http_status or '' }}</td><td>{{ c.outcome }}{% if c.error %}<div class="muted">{{ c.error[:80] }}</div>{% endif %}</td><td>{{ c.result_count if c.result_count is not none else '' }}</td><td>{{ c.credits_used if c.credits_used is not none else '' }}</td><td>{{ c.duration_ms }}</td></tr>{% endfor %}</table></div></div></section>
+{% endblock %}

@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% block body %}
+<section class="card"><h2>New research brief</h2>
+<p class="muted">Describe a market and/or name competitors (names or domains). The desk resolves canonical Crustdata identities, gathers cited evidence, ranks developments for a Corporate Strategy lead and a VC partner, and sets up a shared Watcher.</p>
+<textarea id="brief" rows="4" placeholder="e.g. Build an ongoing intelligence brief on the AI customer-support software market and these competitors: Intercom, Zendesk, Sierra. Track hiring, leadership, funding and company changes. Show what matters to Corporate Strategy and to a VC Investment Partner."></textarea>
+<button id="go" class="primary">Run research</button> <span id="msg" class="muted"></span></section>
+<section class="card"><h2>Recent requests</h2><table><tr><th>#</th><th>Brief</th><th>Status</th><th>Planner</th></tr>
+{% for r in reqs %}<tr><td><a href="/requests/{{ r.id }}">{{ r.id }}</a></td><td><a href="/requests/{{ r.id }}">{{ r.brief_text[:140] }}</a></td>
+<td><span class="pill s-{{ r.status }}">{{ r.status }}</span></td><td class="muted">{{ r.planner_mode }}</td></tr>{% endfor %}</table></section>
+<script>document.getElementById('go').onclick=async()=>{const b=document.getElementById('brief').value;const m=document.getElementById('msg');m.textContent='Submitting…';
+const r=await fetch('/api/requests',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({brief:b})});const j=await r.json();
+if(!r.ok){m.textContent=j.detail||'error';return;}location.href=j.url;};</script>
+{% endblock %}
