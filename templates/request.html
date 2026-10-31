@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block title %}Request {{ req.id }} · CI Desk{% endblock %}{% block body %}
+{% extends "base.html" %}{% block title %}Request {{ req.id }} · SignalPrism{% endblock %}{% block body %}
 <section class="card"><div class="row"><h2>Request #{{ req.id }}</h2><span class="pill s-{{ req.status }}" id="status" data-status="{{ req.status }}" data-rid="{{ req.id }}">{{ req.status }}</span></div>
 <blockquote>{{ req.brief_text }}</blockquote>
 <div class="grid2"><div><h3>Research plan <span class="tag">{{ req.planner_mode or 'planning…' }}</span></h3>

@@ -18,7 +18,7 @@ from .pipeline import choose_candidate, reconcile, run_request
 from .webhook import MAX_BODY, ingest_payload, verify
 
 ROOT = Path(__file__).resolve().parent.parent
-app = FastAPI(title="Persona-aware Competitive Intelligence Desk")
+app = FastAPI(title="SignalPrism")
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 templates = Jinja2Templates(directory=ROOT / "templates")
 

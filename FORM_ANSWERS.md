@@ -4,7 +4,7 @@
 <TEAM NAME>
 
 ## One line
-Turns a plain-English competitor brief into cited, stakeholder-specific intelligence briefs from live Crustdata, and learns from feedback only through reviewed, versioned policy changes.
+SignalPrism turns a plain-English competitor brief into cited, stakeholder-specific intelligence briefs from live Crustdata, and learns from feedback only through reviewed, versioned policy changes.
 
 ## Theme
 Research and Markets (secondary: Investing)
@@ -23,7 +23,7 @@ https://github.com/KrishnaAgarwal2206/ci-desk-contextcon03
 
 What failed and what we learned: name-only lookup is unreliable. "Sierra" returned 12 candidates, all at confidence 1.0, so we never guess; a reviewer picks one. Enrich news mixed in GMC Sierra truck stories, and Crustdata's per-article match confidence let us filter them (we keep ≥0.93). Early LLM calls hit max_tokens and schema-size limits; an array schema and a fallback fixed that.
 
-**(c) With more time.** Receive and score real Watcher change events through a public webhook. Add Person Enrich, Web Fetch, and person/job watches with credit approval. Add alert delivery, auth/RBAC for reviewers, more personas (e.g. supply chain), historical backtesting of policy changes, and an LLM-as-a-judge quality check.
+**(c) With more time.** Receive and score real Watcher change events through a public webhook. Add Person Enrich, Web Fetch, and person/job watches with credit approval. Add alert delivery, auth/RBAC for reviewers, more personas (e.g. supply chain, someone who wants to benchmark their product in the market lets say a founder), historical backtesting of policy changes, and an LLM-as-a-judge quality check.
 
 ## High-level diagram
 https://github.com/KrishnaAgarwal2206/ci-desk-contextcon03/blob/master/docs/ARCHITECTURE_DIAGRAM.md

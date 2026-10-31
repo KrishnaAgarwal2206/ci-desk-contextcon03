@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{% block title %}CI Desk{% endblock %}</title><link rel="stylesheet" href="/static/app.css"></head>
-<body><header class="top"><a href="/" class="brand">Persona-aware Competitive Intelligence Desk</a>
+<title>{% block title %}SignalPrism{% endblock %}</title><link rel="stylesheet" href="/static/app.css"></head>
+<body><header class="top"><a href="/" class="brand">SignalPrism <span style="font-weight:400;opacity:.7">· persona-aware competitive intelligence</span></a>
 <span class="modes"><span class="pill {{ 'ok' if modes.crustdata=='live' else 'warn' }}">Crustdata: {{ modes.crustdata }}</span>
 <span class="pill {{ 'ok' if modes.llm.startswith('llm') else 'warn' }}">LLM: {{ modes.llm }}</span>
 <span class="pill">Watcher delivery: {{ modes.webhook }}</span></span></header>

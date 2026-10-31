@@ -1,4 +1,4 @@
-# Persona-aware Competitive Intelligence Desk
+# SignalPrism — Persona-aware Competitive Intelligence Desk
 
 **ContextCon 03 · Theme: Research and Markets (second segment: Investing)**
 
