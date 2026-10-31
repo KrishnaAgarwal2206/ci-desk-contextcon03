@@ -1,3 +1,10 @@
+// main tabs (persisted in URL hash so refresh/reload keeps the tab)
+function showTab(t) {
+  if (!document.querySelector(`.maintabs [data-tab="${t}"]`)) return;
+  $$('.maintabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  $$('[data-panel]').forEach(p => p.hidden = p.dataset.panel !== t);
+  if (location.hash !== '#' + t) history.replaceState(null, '', '#' + t);
+}
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 async function post(url, body) {
@@ -63,3 +70,15 @@ $$('.choose').forEach(b => b.onclick = async () => {
   try { await post(`/api/entities/${b.dataset.e}/choose`, { crustdata_company_id: +b.dataset.c }); location.reload(); }
   catch (e) { alert(e.message); b.disabled = false; b.textContent = 'use this'; }
 });
+
+$$('.maintabs button').forEach(b => b.onclick = () => { showTab(b.dataset.tab); window.scrollTo({ top: 0 }); });
+{ const h = location.hash.slice(1); if (h) showTab(h); }
+// evidence links jump to the Evidence tab and highlight the row
+document.addEventListener('click', ev => {
+  const a = ev.target.closest('a[href^="#ev"]'); if (!a) return;
+  ev.preventDefault(); showTab('evidence');
+  const row = document.getElementById(a.getAttribute('href').slice(1));
+  if (row) { row.scrollIntoView({ block: 'center' }); row.classList.add('flash'); setTimeout(() => row.classList.remove('flash'), 1600); }
+});
+// matrix row -> open that stakeholder's brief
+$$('.matrix td.cell').forEach(td => td.onclick = () => { showTab('stakeholders'); showPersona(td.dataset.p); });

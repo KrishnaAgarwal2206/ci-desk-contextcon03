@@ -2,7 +2,7 @@
 <section class="card"><div class="row"><h2>Request #{{ req.id }}</h2><span class="pill s-{{ req.status }}" id="status" data-status="{{ req.status }}" data-rid="{{ req.id }}">{{ req.status }}</span></div>
 <blockquote>{{ req.brief_text }}</blockquote>
 <div class="grid2"><div><h3>Research plan <span class="tag">{{ req.planner_mode or 'planning…' }}</span></h3>
-<pre>{{ json.dumps(req.plan, indent=1) }}</pre></div>
+<details><summary class="small">structured plan</summary><pre>{{ json.dumps(req.plan, indent=1) }}</pre></details></div>
 <div><h3>Notes, failures &amp; unknowns</h3>{% if req.notes %}<ul>{% for n in req.notes %}<li class="warnline">{{ n }}</li>{% endfor %}</ul>{% else %}<p class="muted">None.</p>{% endif %}
 <p class="muted">Crustdata balance: before {{ req.credits_before if req.credits_before is not none else 'n/a' }} · after {{ req.credits_after if req.credits_after is not none else 'n/a' }} · this run (X-Credits-Used) {{ credits_used }}</p></div></div></section>
 
@@ -15,24 +15,31 @@
 <div class="kpi"><span>LLM cost (est.)</span><b>${{ '%.3f'|format(llm_cost) }}</b></div>
 <div class="kpi"><span>Watcher</span><b class="sm">{{ (watch.status if watch else 'none') }}</b></div>
 </div>
-<nav class="secnav"><a href="#landscape">Landscape</a><a href="#matrix">Stakeholder matrix</a><a href="#brief">Briefs</a><a href="#governance">Governance</a><a href="#monitoring">Monitoring</a><a href="#evidence">Evidence</a><a href="#trace">Trace</a></nav>
+<nav class="maintabs" role="tablist">
+<button data-tab="overview" class="on">Overview</button>
+<button data-tab="stakeholders">Stakeholder briefs <span class="count">{{ personas|length }}</span></button>
+<button data-tab="governance">Governance{% set pend = proposals|selectattr('state','equalto','pending_review')|list|length %}{% if pend %} <span class="count hot">{{ pend }} pending</span>{% endif %}</button>
+<button data-tab="monitoring">Monitoring <span class="dot {{ 'ok' if watch and watch.status=='active' else '' }}"></span></button>
+<button data-tab="evidence">Evidence <span class="count">{{ evidence|length }}</span></button>
+<button data-tab="trace">Execution trace</button>
+</nav>
 
-<section class="card" id="landscape"><h2>1 · Canonical companies <span class="sub">Crustdata Identify / Search</span></h2>
+<section class="card" id="landscape" data-panel="overview"><h2>Canonical companies <span class="sub">Crustdata Identify / Search</span></h2>
 <table><tr><th>Input</th><th>Resolution</th><th>Crustdata ID</th><th>Name / domain</th><th>Confidence</th><th>How</th><th>Alternatives</th></tr>
 {% for e in ents %}<tr><td>{{ e.query }}</td><td><span class="pill r-{{ e.resolution }}">{{ e.resolution }}</span></td><td><code>{{ e.crustdata_id or '—' }}</code></td>
 <td>{{ e.name }} <span class="muted">{{ e.domain }}</span></td><td>{{ e.confidence if e.confidence is not none else '—' }}</td><td class="muted small">{{ e.resolved_via }}</td>
 <td class="small">{% for a in e.alternatives[:4] %}<div>{{ a.name }} <code>{{ a.crustdata_company_id }}</code> <span class="muted">{{ a.domain }} · {{ a.employee_count_range }} · {{ a.confidence }}</span>{% if e.resolution=='ambiguous' %} <button class="choose small" data-e="{{ e.id }}" data-c="{{ a.crustdata_company_id }}">use this</button>{% endif %}</div>{% endfor %}</td></tr>
 {% else %}<tr><td colspan="7" class="muted">No entities yet.</td></tr>{% endfor %}</table></section>
 
-<section class="card" id="matrix"><h2>2 · One evidence base, different stakeholder priorities <span class="sub">same stored event, scored under each persona's active policy</span></h2>
+<section class="card" id="matrix" data-panel="overview"><h2>One evidence base, different stakeholder priorities <span class="sub">same stored event, scored under each persona's active policy</span></h2>
 {% if matrix %}<table class="matrix"><tr><th>Shared development</th>{% for pid, p in personas.items() %}<th>{{ p.label.split(' / ')[0] if '/' in p.label else p.label }}<div class="muted small">v{{ p.pv.version }}</div></th>{% endfor %}</tr>
 {% for m in matrix %}<tr><td><b>{{ m.event.title[:95] }}</b><div class="muted small">{{ m.event.category }} · {{ m.event.evidence_ids|length }} evidence</div></td>
-{% for c in m.cells %}<td class="cell {{ 'supp' if c.a.suppressed else ('hot' if c.a.above_threshold else '') }}" title="weight {{ c.a.components.category_weight }} · threshold {{ c.a.components.threshold }}">
+{% for c in m.cells %}<td data-p="{{ c.pid }}" class="cell {{ 'supp' if c.a.suppressed else ('hot' if c.a.above_threshold else '') }}" title="weight {{ c.a.components.category_weight }} · threshold {{ c.a.components.threshold }}">
 <div class="bar"><i style="width:{{ (c.a.score*100)|round|int }}%"></i></div><span>{{ 'suppressed' if c.a.suppressed else '%.2f'|format(c.a.score) }}</span></td>{% endfor %}</tr>{% endfor %}</table>
-<p class="muted small">Bar = score (base significance × persona weight × evidence factor). Green = above that stakeholder's alert threshold. Hover a cell for weight/threshold.</p>
+<p class="muted small">Bar = score (base significance × persona weight × evidence factor). Green = above that stakeholder's alert threshold. Hover a cell for weight/threshold · click to open that stakeholder's brief.</p>
 {% else %}<p class="muted">No evidence-backed developments yet.</p>{% endif %}</section>
 
-<section class="card" id="brief"><div class="row"><h2>3 · Stakeholder intelligence brief</h2>
+<section class="card" id="brief" data-panel="stakeholders" hidden><div class="row"><h2>Stakeholder intelligence brief</h2>
 <div class="tabs">{% for pid, p in personas.items() %}<button class="tab {{ 'on' if loop.first }}" data-p="{{ pid }}">{{ p.label }} <span class="tag">policy v{{ p.pv.version }}</span></button>{% endfor %}</div></div>
 {% for pid, p in personas.items() %}<div class="persona" data-p="{{ pid }}" {% if not loop.first %}hidden{% endif %}>
 {% if p.brief %}<p><span class="tag">{{ p.brief.mode }}</span> <span class="tag">summary: {{ p.brief.body.summary_kind }}</span> <span class="tag">brief built on policy v{{ p.brief.body.policy_version }}</span></p>
@@ -52,7 +59,7 @@
 {% if p.versions|length > 1 %}<button class="rollback" data-p="{{ pid }}" data-v="{{ p.versions[1].version }}">Roll back to v{{ p.versions[1].version }} (creates new version)</button>{% endif %}
 </div>{% endfor %}</section>
 
-<section class="card" id="governance"><h2>4 · Governed feedback → policy proposal <span class="sub">proposes only; a named reviewer activates</span></h2>
+<section class="card" id="governance" data-panel="governance" hidden><h2>Governed feedback → policy proposal <span class="sub">proposes only; a named reviewer activates</span></h2>
 <div class="row"><select id="fb-persona">{% for pid, p in personas.items() %}<option value="{{ pid }}" {{ 'selected' if pid=='vc_partner' }}>{{ p.label }}</option>{% endfor %}</select>
 <input id="reviewer" placeholder="Reviewer name" value=""></div>
 <textarea id="fb" rows="3">For the VC Partner persona, suppress routine junior hiring alerts. Prioritize senior leadership changes, funding, founder moves and GTM expansion. Do not lower the evidence threshold.</textarea>
@@ -72,7 +79,7 @@
 {% if pr.state=='pending_review' %}<button class="approve primary" data-id="{{ pr.id }}" data-risk="{{ pr.risk }}">Approve → new {{ pr.persona_id }} version</button> <button class="reject" data-id="{{ pr.id }}">Reject</button>{% endif %}
 {% if pr.reviewer %}<span class="muted small">decided by {{ pr.reviewer }}</span>{% endif %}</div>{% endfor %}</section>
 
-<section class="card" id="monitoring"><h2>5 · Shared Watcher <span class="sub">scheduled monitoring</span></h2>
+<section class="card" id="monitoring" data-panel="monitoring" hidden><h2>Shared Watcher <span class="sub">scheduled monitoring</span></h2>
 {% if watch %}<div class="grid2"><div><p>Crustdata watch ID <code>{{ watch.crustdata_watch_id or '—' }}</code> · status <b>{{ watch.status }}</b> · delivery <b>{{ watch.delivery }}</b></p>
 <p class="small">Schedule: every {{ watch.definition.config.trigger.every_hours }} h · max {{ watch.definition.config.max_results_per_run }} results/run · freshness SLA: {{ watch.readback.config.refresh_frequency_days if watch.readback and watch.readback.config else '30' }} days (company entity watch: 30-day only). <b>Scheduled monitoring — not real time.</b></p>
 <p class="small">Baseline: first run is a free before-snapshot (sample ≤5, no changes) — not history. last_run_at: {{ watch.readback.last_run_at if watch.readback else 'n/a' }}. The brief above came from Identify/Enrich/Job/Person/Web calls.</p>
@@ -86,12 +93,12 @@
 {% for e in envs %}<tr><td>{{ e.id }}</td><td>{{ e.crustdata_watch_id }}</td><td>{{ e.notification_id }}</td><td><span class="pill">{{ e.state }}</span>{% if e.is_test %} <span class="tag warn">TEST — not a business event</span>{% endif %}</td><td>{{ e.via }}</td></tr>
 {% else %}<tr><td colspan="5" class="muted">None received yet.</td></tr>{% endfor %}</table></section>
 
-<section class="card" id="evidence"><h2>6 · Evidence <span class="sub">{{ evidence|length }} records with source + retrieval time</span></h2>
+<section class="card" id="evidence" data-panel="evidence" hidden><h2>Evidence <span class="sub">{{ evidence|length }} records with source + retrieval time</span></h2>
 <table class="small"><tr><th>ID</th><th>Source</th><th>Record / URL</th><th>Excerpt / field value</th><th>Source date</th><th>Retrieved</th></tr>
 {% for id, ev in evidence.items() %}<tr id="ev{{ id }}"><td>E{{ id }}</td><td>{{ ev.source_type }}</td><td>{% if ev.source_url %}<a href="{{ ev.source_url }}" target="_blank" rel="noopener">{{ ev.source_url[:60] }}</a><br>{% endif %}<code>{{ ev.record_ref }}</code></td>
 <td>{{ ev.excerpt[:220] }}</td><td>{{ ev.source_ts[:10] }}</td><td>{{ ev.retrieved_at.strftime('%H:%M:%S') }}</td></tr>{% endfor %}</table></section>
 
-<section class="card" id="trace"><h2>7 · Execution trace</h2><div class="grid2"><div>
+<section class="card" id="trace" data-panel="trace" hidden><h2>Execution trace</h2><div class="grid2"><div>
 <h3>Stages</h3><table class="small"><tr><th>Stage</th><th>Status</th><th>ms</th><th>Detail</th></tr>{% for s in steps %}<tr><td>{{ s.stage }}</td><td>{{ s.status }}</td><td>{{ s.duration_ms }}</td><td>{{ s.detail }}</td></tr>{% endfor %}</table>
 <h3>Anthropic usage <span class="tag">${{ llm_cost }} this view · ${{ llm_total }} app total (cap ${{ '%.2f'|format(5) }})</span></h3>
 <table class="small"><tr><th>Task</th><th>Outcome</th><th>In</th><th>Out</th><th>Est. $</th><th>ms</th></tr>{% for c in llm_calls %}<tr><td>{{ c.task }}</td><td>{{ c.outcome }}</td><td>{{ c.input_tokens }}</td><td>{{ c.output_tokens }}</td><td>{{ '%.4f'|format(c.est_cost_usd) }}</td><td>{{ c.duration_ms }}</td></tr>{% else %}<tr><td colspan="6" class="muted">No LLM calls (deterministic mode).</td></tr>{% endfor %}</table></div>
