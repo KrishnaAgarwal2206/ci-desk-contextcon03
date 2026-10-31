@@ -27,6 +27,8 @@ class Settings:
     llm_spend_cap_usd: float = field(default_factory=lambda: float(os.getenv("LLM_SPEND_CAP_USD", "5")))
     llm_max_calls_per_request: int = field(default_factory=lambda: int(os.getenv("LLM_MAX_CALLS_PER_REQUEST", "3")))
     llm_max_output_tokens: int = field(default_factory=lambda: int(os.getenv("LLM_MAX_OUTPUT_TOKENS", "1200")))
+    # Rich multi-stakeholder brief synthesis needs more room than planning/feedback calls.
+    llm_synth_max_output_tokens: int = field(default_factory=lambda: int(os.getenv("LLM_SYNTH_MAX_OUTPUT_TOKENS", "4000")))
     price_in_per_mtok: float = field(default_factory=lambda: float(os.getenv("ANTHROPIC_PRICE_INPUT_PER_MTOK", "2")))
     price_out_per_mtok: float = field(default_factory=lambda: float(os.getenv("ANTHROPIC_PRICE_OUTPUT_PER_MTOK", "10")))
 

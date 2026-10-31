@@ -407,24 +407,73 @@ def _last_call_id(db, request_id):
 
 # ---------------- briefs ----------------
 
-BRIEF_SCHEMA = {
-    "type": "object", "additionalProperties": False, "required": list(pol.LLM_SYNTH_PERSONAS),
-    "properties": {p: {"type": "object", "additionalProperties": False, "required": ["summary", "findings"],
-                       "properties": {"summary": {"type": "string"},
-                                      "findings": {"type": "array", "items": {
-                                          "type": "object", "additionalProperties": False,
-                                          "required": ["event_id", "why_it_matters", "evidence_ids"],
-                                          "properties": {"event_id": {"type": "integer"},
-                                                         "why_it_matters": {"type": "string"},
-                                                         "evidence_ids": {"type": "array", "items": {"type": "integer"}}}}}}}
-                   for p in pol.LLM_SYNTH_PERSONAS},
-}
+INSIGHT_ITEM = {
+    "type": "object", "additionalProperties": False,
+    "required": ["headline", "insight", "implication", "recommended_action", "confidence", "event_ids", "evidence_ids"],
+    "properties": {"headline": {"type": "string"}, "insight": {"type": "string"}, "implication": {"type": "string"},
+                   "recommended_action": {"type": "string"},
+                   "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+                   "event_ids": {"type": "array", "items": {"type": "integer"}},
+                   "evidence_ids": {"type": "array", "items": {"type": "integer"}}}}
 
-BRIEF_SYSTEM = ("You write competitive-intelligence briefs for two personas from the supplied events ONLY. "
-                "For each persona, write a summary of at most 2 sentences and a why_it_matters line (max 20 words) for each listed event, written "
-                "for that persona's objective. Every statement must be supported by the event's facts; cite only the "
-                "evidence_ids given for that event. Do not add facts, numbers or companies that are not in the input. "
-                "Phrase interpretations as possibilities, not certainties. Do not reorder or rescore events.")
+
+def brief_schema(pids) -> dict:
+    # One array of stakeholder objects (a per-persona object schema compiled too large for structured output).
+    return {"type": "object", "additionalProperties": False, "required": ["stakeholders"],
+            "properties": {"stakeholders": {"type": "array", "items": {
+                "type": "object", "additionalProperties": False,
+                "required": ["persona_id", "executive_summary", "insights", "watch_next"],
+                "properties": {"persona_id": {"type": "string", "enum": list(pids)},
+                               "executive_summary": {"type": "string"},
+                               "insights": {"type": "array", "items": INSIGHT_ITEM},
+                               "watch_next": {"type": "array", "items": {"type": "string"}}}}}}}
+
+
+BRIEF_SYSTEM = (
+    "You are a senior competitive-intelligence analyst writing decision briefs for several stakeholders from ONE shared "
+    "evidence base. Use ONLY the supplied events and their facts. Return one entry in 'stakeholders' for every "
+    "stakeholder listed (persona_id = its key). For each stakeholder:\n"
+    "- executive_summary: 3-4 sentences in plain business English: what is happening across these competitors and what "
+    "it means for this stakeholder's objective.\n"
+    "- insights: 3-4 insights. Connect related events where the facts support it (e.g. funding plus hiring at the same "
+    "company), rather than restating one change. Each has a short headline; 'insight' (2-3 sentences explaining the "
+    "pattern, quoting concrete numbers from the facts); 'implication' for this stakeholder (1-2 sentences); "
+    "'recommended_action' (one concrete, specific next step this stakeholder could take this week); confidence "
+    "(high = multiple corroborating facts, medium = one solid fact, low = thin or indirect); event_ids and evidence_ids "
+    "taken ONLY from the events you used.\n"
+    "- watch_next: 2-3 specific signals to monitor next.\n"
+    "Rules: never invent facts, numbers, people or companies; interpretations are hypotheses ('suggests', 'may'); "
+    "different stakeholders must get genuinely different angles on the same events; do not rescore or rerank.")
+
+
+def _event_payload(e: Event, claims) -> dict:
+    return {"event_id": e.id, "company": e.company_name, "category": e.category, "title": e.title[:160],
+            "facts": claims.get(e.id, [])[:3], "evidence_ids": e.evidence_ids[:5]}
+
+
+def validate_insights(raw: list, by_id: dict) -> list:
+    """Keep only insights whose event_ids exist and whose evidence_ids belong to those events."""
+    out = []
+    for ins in raw or []:
+        eids = [i for i in ins.get("event_ids") or [] if i in by_id]
+        allowed = set().union(*[set(by_id[i].evidence_ids) for i in eids]) if eids else set()
+        cited = [i for i in ins.get("evidence_ids") or [] if i in allowed]
+        if not eids or not cited or not ins.get("insight"):
+            continue
+        out.append({**ins, "event_ids": eids, "evidence_ids": cited,
+                    "companies": sorted({by_id[i].company_name for i in eids})})
+    return out
+
+
+def deterministic_insights(ranked, by_id, claims, lens) -> list:
+    out = []
+    for r in [x for x in ranked if x["above_threshold"]][:4] or ranked[:3]:
+        e = by_id[r["event_id"]]
+        out.append({"headline": e.title, "insight": " ".join(claims.get(e.id, [])[:2]),
+                    "implication": pol.why(lens, e.category), "recommended_action": pol.action(lens, e.category),
+                    "confidence": "medium" if len(e.evidence_ids) > 1 else "low", "event_ids": [e.id],
+                    "evidence_ids": e.evidence_ids[:4], "companies": [e.company_name]})
+    return out
 
 
 def build_briefs(db, req: Request, llm: LLMProvider, ents: list[Entity]):
@@ -440,41 +489,48 @@ def build_briefs(db, req: Request, llm: LLMProvider, ents: list[Entity]):
         claims.setdefault(c.event_id, []).append(c.text)
     llm_out, mode = None, "deterministic (no events)"
     if events:
-        payload = {pid: {"persona": pol.PERSONAS[pid]["label"], "objective": pv.body["objective"],
-                         "events": [{"event_id": r["event_id"], "company": by_id[r["event_id"]].company_name,
-                                     "category": r["category"], "facts": claims.get(r["event_id"], [])[:2],
-                                     "evidence_ids": by_id[r["event_id"]].evidence_ids[:4]} for r in ranked[:5]]}
-                   for pid, (pv, ranked) in per.items() if pid in pol.LLM_SYNTH_PERSONAS}
-        llm_out, mode = llm.complete_json("synthesis", BRIEF_SYSTEM, json.dumps(payload), BRIEF_SCHEMA)
+        shared = sorted({r["event_id"] for _, ranked in per.values() for r in ranked[:5]})[:14]
+        payload = {"events": [_event_payload(by_id[i], claims) for i in shared],
+                   "stakeholders": {pid: {"label": pol.PERSONAS[pid]["label"], "objective": pv.body["objective"],
+                                          "priority_order": [{"event_id": r["event_id"], "score": r["score"]}
+                                                             for r in ranked[:5]]}
+                                    for pid, (pv, ranked) in per.items()}}
+        llm_out, mode = llm.complete_json("synthesis", BRIEF_SYSTEM, json.dumps(payload), brief_schema(list(per)),
+                                          max_tokens=settings.llm_synth_max_output_tokens)
+        if llm_out:
+            llm_out = {x.get("persona_id"): x for x in llm_out.get("stakeholders", []) if isinstance(x, dict)}
     unknowns = [f"'{e.query}' — {e.resolution}: {e.resolved_via}" for e in ents if e.resolution != "resolved"]
     unknowns += [n for n in req.notes]
     for pid, (pv, ranked) in per.items():
+        lens = pv.body["lens"]
         llm_p = (llm_out or {}).get(pid) or {}
-        llm_find = {f["event_id"]: f for f in llm_p.get("findings", []) if isinstance(f, dict)}
+        insights = validate_insights(llm_p.get("insights"), by_id)
+        rich = bool(insights and llm_p.get("executive_summary"))
         findings = []
         for r in ranked:
             e = by_id[r["event_id"]]
-            lf = llm_find.get(e.id)
-            valid = lf and set(lf.get("evidence_ids") or []) <= set(e.evidence_ids) and lf.get("why_it_matters")
             findings.append({"event_id": e.id, "company": e.company_name, "category": e.category, "title": e.title,
                              "score": r["score"], "above_threshold": r["above_threshold"],
                              "facts": claims.get(e.id, [])[:4], "evidence_ids": e.evidence_ids,
-                             "why_it_matters": lf["why_it_matters"] if valid else pol.why(pv.body["lens"], e.category),
-                             "why_source": "llm (inference)" if valid else "template (inference)"})
-        summary = llm_p.get("summary") if llm_p else None
-        if not summary:
+                             "why_it_matters": pol.why(lens, e.category), "action": pol.action(lens, e.category),
+                             "why_source": "template (inference)"})
+        if rich:
+            summary = llm_p["executive_summary"]
+        else:
+            insights = deterministic_insights(ranked, by_id, claims, lens)
             top = [f for f in findings if f["above_threshold"]][:3]
             summary = (f"{len(findings)} ranked developments across {len({f['company'] for f in findings})} companies; "
-                       f"{len(top)} above this persona's alert threshold."
-                       + (" Top: " + "; ".join(f["title"] for f in top) + "." if top else ""))
+                       f"{len(top)} above this stakeholder's alert threshold."
+                       + (" Most important: " + "; ".join(f["title"] for f in top) + "." if top else ""))
         body = {"persona": pol.PERSONAS[pid]["label"], "policy_version": pv.version, "summary": summary,
-                "summary_kind": "llm synthesis (inference over cited facts)" if llm_p.get("summary") else "deterministic",
+                "summary_kind": "llm synthesis (inference over cited facts)" if rich else "deterministic",
+                "insights": insights, "insights_source": "llm (validated citations)" if rich else "template",
+                "watch_next": (llm_p.get("watch_next") or [])[:4] if rich else [],
                 "findings": findings, "unknowns": unknowns,
                 "next_steps": ["Review ambiguous entities and re-run with a domain to resolve them."] if any(
                     e.resolution == "ambiguous" for e in ents) else []}
         db.add(Brief(request_id=req.id, persona_id=pid, policy_version_id=pv.id,
-                     mode=mode if llm_p else ("deterministic — template (LLM synthesis limited to primary personas)" if llm_out
-                           else "deterministic — " + mode.replace("deterministic ", "")), body=body))
+                     mode=mode if rich else "deterministic — " + mode.replace("deterministic ", ""), body=body))
     req.brief_mode = mode
     db.commit()
 

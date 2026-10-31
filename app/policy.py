@@ -124,6 +124,37 @@ WHY = {  # inference templates, always labelled "inference"
 }
 
 
+ACTIONS = {  # deterministic recommended next steps (used when LLM synthesis is unavailable)
+    ("strategy", "product_launch"): "Run a feature/positioning comparison against our offering and brief product leadership.",
+    ("strategy", "partnership"): "Map the partner's channel overlap with our accounts; assess whether a counter-partnership is needed.",
+    ("strategy", "senior_hiring"): "Review the roles posted to infer which capability is being built; add it to the competitor profile.",
+    ("strategy", "gtm_expansion"): "Check which regions/segments the GTM roles target and alert the affected business unit.",
+    ("strategy", "funding"): "Update the competitor's resourcing assumptions and stress-test our pricing and roadmap plans.",
+    ("strategy", "leadership_change"): "Profile the new leader's background for likely strategic shifts.",
+    ("strategy", "headcount_change"): "Track headcount trend quarterly; flag to strategy review if growth persists.",
+    ("investor", "funding"): "Refresh valuation comps and assess competitive pressure on portfolio companies in this segment.",
+    ("investor", "leadership_change"): "Assess leadership quality; schedule a reference check if relevant to a live deal.",
+    ("investor", "founder_move"): "Track the founder for a potential new venture; add to sourcing pipeline.",
+    ("investor", "gtm_expansion"): "Ask portfolio companies in this space whether they see this competitor in deals.",
+    ("investor", "senior_hiring"): "Note execution capacity being built; revisit in next market map.",
+    ("investor", "headcount_change"): "Compare growth against peers in the market map; flag outliers for a sourcing call.",
+    ("technology", "product_launch"): "Have engineering assess the launch's technical approach against our roadmap.",
+    ("technology", "senior_hiring"): "Review job descriptions for the technology stack and capabilities being built.",
+    ("technology", "partnership"): "Evaluate whether the partner's technology closes a gap we compete on.",
+    ("commercial", "gtm_expansion"): "Warn account teams in the targeted regions and refresh the competitive battlecard.",
+    ("commercial", "partnership"): "Identify shared customers and prepare a positioning response for sales.",
+    ("commercial", "product_launch"): "Update battlecards and objection handling before the next pipeline review.",
+    ("talent", "senior_hiring"): "Review retention risk for comparable senior roles; check our compensation benchmarks.",
+    ("talent", "junior_hiring"): "Adjust campus/early-career outreach timing; expect competition for the same pool.",
+    ("talent", "headcount_change"): "If the competitor is shrinking, open targeted outreach to affected teams.",
+    ("talent", "leadership_change"): "Watch for team moves following the leadership change; prepare outreach.",
+}
+
+
+def action(lens: str, category: str) -> str:
+    return ACTIONS.get((lens, category), "Monitor for corroborating signals before acting.")
+
+
 def why(lens: str, category: str) -> str:
     return WHY.get((lens, category), "Relevance depends on context; treat as background signal.")
 

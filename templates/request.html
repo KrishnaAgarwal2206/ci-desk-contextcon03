@@ -43,7 +43,19 @@
 <div class="tabs">{% for pid, p in personas.items() %}<button class="tab {{ 'on' if loop.first }}" data-p="{{ pid }}">{{ p.label }} <span class="tag">policy v{{ p.pv.version }}</span></button>{% endfor %}</div></div>
 {% for pid, p in personas.items() %}<div class="persona" data-p="{{ pid }}" {% if not loop.first %}hidden{% endif %}>
 {% if p.brief %}<p><span class="tag">{{ p.brief.mode }}</span> <span class="tag">summary: {{ p.brief.body.summary_kind }}</span> <span class="tag">brief built on policy v{{ p.brief.body.policy_version }}</span></p>
-<p class="summary">{{ p.brief.body.summary }}</p>{% else %}<p class="muted">Brief not generated yet.</p>{% endif %}
+<h3>Executive summary</h3><p class="summary">{{ p.brief.body.summary }}</p>
+{% if p.brief.body.insights %}<h3>Key insights &amp; recommended actions <span class="tag">{{ p.brief.body.insights_source }}</span></h3>
+<div class="insights">{% for ins in p.brief.body.insights %}<article class="insight c-{{ ins.confidence }}">
+<header><b>{{ ins.headline }}</b><span class="tag conf">{{ ins.confidence }} confidence</span></header>
+<p class="small muted">{{ ins.companies|join(', ') }}</p>
+<p>{{ ins.insight }}</p>
+<div class="impl"><span>Why it matters</span>{{ ins.implication }}</div>
+<div class="act"><span>Recommended action</span>{{ ins.recommended_action }}</div>
+<footer class="small">Sources: {% for eid in ins.evidence_ids[:6] %}<a href="#ev{{ eid }}">E{{ eid }}</a> {% endfor %}<span class="muted">· interpretation is inference; facts are cited</span></footer>
+</article>{% endfor %}</div>{% endif %}
+{% if p.brief.body.watch_next %}<h3>What to watch next</h3><ul class="watchnext">{% for w in p.brief.body.watch_next %}<li>{{ w }}</li>{% endfor %}</ul>{% endif %}
+<h3>All ranked developments</h3>
+{% else %}<p class="muted">Brief not generated yet.</p>{% endif %}
 <h3>Ranked developments (current policy v{{ p.pv.version }}) — same shared events, persona-specific scores</h3>
 <table class="events"><tr><th>#</th><th>Development</th><th>Category</th><th>Score</th><th>Why it matters <span class="tag">inference</span></th><th>Evidence</th></tr>
 {% for row in p.rows %}{% set e=row.event %}{% set a=row.a %}<tr class="{{ 'supp' if a.suppressed else ('alert' if a.above_threshold else '') }}">
@@ -51,7 +63,7 @@
 <details><summary class="small">score breakdown</summary><pre class="small">{{ json.dumps(a.components, indent=1) }}</pre></details></td>
 <td>{{ e.category }}{% if e.origin=='watcher' %}<div class="tag">watcher</div>{% endif %}</td>
 <td><b>{{ '%.3f'|format(a.score) }}</b>{% if a.suppressed %}<div class="tag">suppressed</div>{% elif a.above_threshold %}<div class="tag ok">alert</div>{% endif %}</td>
-<td class="small">{% set f = (p.brief.body.findings|selectattr('event_id','equalto',e.id)|first) if p.brief else none %}{{ f.why_it_matters if f else '' }}{% if f %}<div class="muted">{{ f.why_source }}</div>{% endif %}</td>
+<td class="small">{% set f = (p.brief.body.findings|selectattr('event_id','equalto',e.id)|first) if p.brief else none %}{{ f.why_it_matters if f else '' }}{% if f and f.action %}<div class="actline">→ {{ f.action }}</div>{% endif %}</td>
 <td class="small">{% for eid in e.evidence_ids[:4] %}<a href="#ev{{ eid }}">E{{ eid }}</a> {% endfor %}{% if e.evidence_ids|length > 4 %}+{{ e.evidence_ids|length - 4 }}{% endif %}</td></tr>
 {% else %}<tr><td colspan="6" class="muted">No evidence-backed developments. Nothing is shown without evidence.</td></tr>{% endfor %}</table>
 {% if p.brief and p.brief.body.unknowns %}<h3>Unknowns / gaps</h3><ul>{% for u in p.brief.body.unknowns %}<li class="muted">{{ u }}</li>{% endfor %}</ul>{% endif %}

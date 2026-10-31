@@ -304,3 +304,16 @@ def test_custom_persona_file_validated(tmp_path):
         assert pol.PERSONAS["supply_chain"]["min_sources"] >= pol.GLOBAL_MIN_SOURCES
     finally:
         pol.PERSONAS.pop("supply_chain", None)
+
+
+def test_llm_insights_citation_validation(db):
+    from app.pipeline import validate_insights
+    a = mk_event(db, "funding", "vi1")
+    b = mk_event(db, "senior_hiring", "vi2")
+    by_id = {a.id: a, b.id: b}
+    good = {"headline": "h", "insight": "x", "implication": "y", "recommended_action": "z", "confidence": "high",
+            "event_ids": [a.id, b.id], "evidence_ids": a.evidence_ids + [99999]}
+    bad_event = {**good, "event_ids": [424242], "evidence_ids": a.evidence_ids}
+    out = validate_insights([good, bad_event], by_id)
+    assert len(out) == 1 and out[0]["evidence_ids"] == a.evidence_ids  # fabricated citation stripped, unknown event dropped
+    assert pol.action("talent", "senior_hiring") != pol.action("commercial", "senior_hiring")

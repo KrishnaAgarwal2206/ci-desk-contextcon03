@@ -22,7 +22,7 @@ class LLMProvider:
         self.db = db
         self.request_id = request_id
         self.api_key = settings.anthropic_api_key if api_key is None else api_key
-        self.http = httpx.Client(timeout=60.0, transport=transport)
+        self.http = httpx.Client(timeout=150.0, transport=transport)
         self.last_reason = ""
 
     def total_spend(self) -> float:
@@ -42,7 +42,7 @@ class LLMProvider:
     def cost(self, tin: int, tout: int) -> float:
         return tin / 1e6 * settings.price_in_per_mtok + tout / 1e6 * settings.price_out_per_mtok
 
-    def complete_json(self, task: str, system: str, user: str, schema: dict, validator=None):
+    def complete_json(self, task: str, system: str, user: str, schema: dict, validator=None, max_tokens: int | None = None):
         """Returns (data, mode_label). data is None on any failure."""
         if not settings.llm_enabled:
             self.last_reason = "llm_disabled"
@@ -58,7 +58,7 @@ class LLMProvider:
             return None, "deterministic (LLM call limit reached)"
         body = {
             "model": settings.anthropic_model,
-            "max_tokens": settings.llm_max_output_tokens,
+            "max_tokens": max_tokens or settings.llm_max_output_tokens,
             "system": system,
             "messages": [{"role": "user", "content": user}],
             "output_config": {"effort": "low", "format": {"type": "json_schema", "schema": schema}},

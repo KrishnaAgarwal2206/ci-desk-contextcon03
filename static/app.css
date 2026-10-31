@@ -78,3 +78,16 @@ details summary{cursor:pointer;color:var(--accent)}
 tr.flash td{background:var(--warn-soft)!important;transition:background .3s}
 .kpi{border-top:3px solid var(--accent)}.kpi:nth-child(2){border-top-color:#14b8a6}.kpi:nth-child(3){border-top-color:#0ea5e9}
 .kpi:nth-child(4){border-top-color:#8b5cf6}.kpi:nth-child(5){border-top-color:#f59e0b}.kpi:nth-child(6){border-top-color:#ec4899}.kpi:nth-child(7){border-top-color:#22c55e}
+
+/* insight cards */
+.insights{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:12px}
+@media(max-width:520px){.insights{grid-template-columns:1fr}}
+.insight{border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:12px;padding:14px 16px;background:var(--card);box-shadow:var(--shadow)}
+.insight.c-high{border-left-color:var(--ok)}.insight.c-low{border-left-color:var(--warn)}
+.insight header{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}.insight header b{font-size:15px;line-height:1.35}
+.insight p{margin:6px 0;color:var(--ink2);line-height:1.6}
+.insight .impl,.insight .act{margin-top:8px;padding:8px 10px;border-radius:8px;font-size:13px;line-height:1.5}
+.insight .impl{background:var(--accent-soft)}.insight .act{background:var(--ok-soft)}
+.insight .impl span,.insight .act span{display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:2px}
+.insight footer{margin-top:8px;color:var(--muted)}.tag.conf{white-space:nowrap}
+.watchnext li{margin:4px 0;color:var(--ink2)}.actline{margin-top:4px;color:var(--ok);font-size:12px}

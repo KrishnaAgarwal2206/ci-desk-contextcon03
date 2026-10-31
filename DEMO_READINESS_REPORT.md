@@ -27,7 +27,7 @@ Typical fresh run: ~15 credits (3 companies), all within the 150-credit run cap.
 |---|---|
 | Auth + model config | **LIVE** (env-configured; key never logged) |
 | Call 1 — research planner (JSON schema output) | **LIVE** (~$0.003/request) |
-| Call 2 — brief synthesis (Strategy + VC only) | **LIVE** (~$0.013); first attempt hit `max_tokens` → automatic labelled fallback, fixed by smaller payload |
+| Call 2 — rich brief synthesis (all 5 stakeholders, one call, `LLM_SYNTH_MAX_OUTPUT_TOKENS`=4000) | **LIVE** (~$0.038, ~24 s). Earlier attempts hit `max_tokens` and "compiled grammar too large" → automatic labelled fallback; fixed with an array schema |
 | Call 3 — feedback → typed PolicyProposal | **LIVE** (proposal parser `llm:claude-sonnet-5-5`) |
 | Token + cost logging | **LIVE** (`llm_call` table, trace panel) and TESTED |
 | $5 spend cap, 3 calls/request, 1,200 output tokens | TESTED (cap, no key, invalid output) |
@@ -40,7 +40,7 @@ Final fresh run (request #4, 14:44): "Sierra, decagon.ai, intercom.com" → Deca
 Fresh brief → LLM plan → Identify (canonical IDs; "Sierra"/"Intercom" names surfaced as ambiguous with candidates) → Enrich/Jobs/People/Web evidence with source + retrieval time → claims (fact vs inference) and deduplicated events → five stakeholder scores per shared event (matrix view) → per-persona briefs → NL feedback → validated pending proposal with diff + replay → reviewer approval → new persona policy version, other personas unchanged → shared Watcher create/read-back → run-history reconciliation → trace with credits and LLM cost.
 
 ## Incomplete / simulated / must not be claimed
-- R&D, Sales/Marketing, Recruiting "why it matters" text is **template-based** (labelled); only Strategy and VC briefs are LLM-written.
+- Insight cards are LLM-written for all five stakeholders when the LLM is available (citations validated); the per-row "why it matters" and action lines in the ranked table are deterministic templates (labelled). Interpretations are inference, not fact.
 - No Supply Chain persona; no alert delivery/routing (alerts = UI threshold flag only); no LLM judge; no auth/RBAC (reviewer is a typed name); replay covers stored events only (no historical backtest).
 - No Watcher change event has been received; monitoring is **scheduled (weekly), 30-day SLA**, not real time.
 - Company Search market-only path not run end-to-end; webhook receiver not exercised live.
