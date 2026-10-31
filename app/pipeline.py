@@ -408,7 +408,7 @@ def _last_call_id(db, request_id):
 # ---------------- briefs ----------------
 
 BRIEF_SCHEMA = {
-    "type": "object", "additionalProperties": False, "required": ["ci_lead", "vc_partner"],
+    "type": "object", "additionalProperties": False, "required": list(pol.LLM_SYNTH_PERSONAS),
     "properties": {p: {"type": "object", "additionalProperties": False, "required": ["summary", "findings"],
                        "properties": {"summary": {"type": "string"},
                                       "findings": {"type": "array", "items": {
@@ -417,7 +417,7 @@ BRIEF_SCHEMA = {
                                           "properties": {"event_id": {"type": "integer"},
                                                          "why_it_matters": {"type": "string"},
                                                          "evidence_ids": {"type": "array", "items": {"type": "integer"}}}}}}}
-                   for p in ("ci_lead", "vc_partner")},
+                   for p in pol.LLM_SYNTH_PERSONAS},
 }
 
 BRIEF_SYSTEM = ("You write competitive-intelligence briefs for two personas from the supplied events ONLY. "
@@ -444,7 +444,7 @@ def build_briefs(db, req: Request, llm: LLMProvider, ents: list[Entity]):
                          "events": [{"event_id": r["event_id"], "company": by_id[r["event_id"]].company_name,
                                      "category": r["category"], "facts": claims.get(r["event_id"], [])[:2],
                                      "evidence_ids": by_id[r["event_id"]].evidence_ids[:4]} for r in ranked[:5]]}
-                   for pid, (pv, ranked) in per.items()}
+                   for pid, (pv, ranked) in per.items() if pid in pol.LLM_SYNTH_PERSONAS}
         llm_out, mode = llm.complete_json("synthesis", BRIEF_SYSTEM, json.dumps(payload), BRIEF_SCHEMA)
     unknowns = [f"'{e.query}' — {e.resolution}: {e.resolved_via}" for e in ents if e.resolution != "resolved"]
     unknowns += [n for n in req.notes]
@@ -461,19 +461,20 @@ def build_briefs(db, req: Request, llm: LLMProvider, ents: list[Entity]):
                              "facts": claims.get(e.id, [])[:4], "evidence_ids": e.evidence_ids,
                              "why_it_matters": lf["why_it_matters"] if valid else pol.why(pv.body["lens"], e.category),
                              "why_source": "llm (inference)" if valid else "template (inference)"})
-        summary = llm_p.get("summary") if llm_out else None
+        summary = llm_p.get("summary") if llm_p else None
         if not summary:
             top = [f for f in findings if f["above_threshold"]][:3]
             summary = (f"{len(findings)} ranked developments across {len({f['company'] for f in findings})} companies; "
                        f"{len(top)} above this persona's alert threshold."
                        + (" Top: " + "; ".join(f["title"] for f in top) + "." if top else ""))
         body = {"persona": pol.PERSONAS[pid]["label"], "policy_version": pv.version, "summary": summary,
-                "summary_kind": "llm synthesis (inference over cited facts)" if llm_out else "deterministic",
+                "summary_kind": "llm synthesis (inference over cited facts)" if llm_p.get("summary") else "deterministic",
                 "findings": findings, "unknowns": unknowns,
                 "next_steps": ["Review ambiguous entities and re-run with a domain to resolve them."] if any(
                     e.resolution == "ambiguous" for e in ents) else []}
         db.add(Brief(request_id=req.id, persona_id=pid, policy_version_id=pv.id,
-                     mode=mode if llm_out else "deterministic — " + mode.replace("deterministic ", ""), body=body))
+                     mode=mode if llm_p else ("deterministic — template (LLM synthesis limited to primary personas)" if llm_out
+                           else "deterministic — " + mode.replace("deterministic ", "")), body=body))
     req.brief_mode = mode
     db.commit()
 

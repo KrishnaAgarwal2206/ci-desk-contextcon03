@@ -263,4 +263,44 @@ def test_webhook_test_baseline_isolation_and_duplicates(db):
     assert ingest_payload(db, real, "webhook") == {"state": "processed", "events": 1}
     assert ingest_payload(db, real, "webhook")["state"] == "duplicate"
     assert db.query(Event).count() == 1 and db.query(WatcherEnvelope).count() == 3
-    assert db.query(Assessment).count() == 2  # scored once per persona
+    assert db.query(Assessment).count() == len(pol.PERSONAS)  # scored once per persona
+
+
+# ---------- multi-stakeholder ----------
+
+def test_one_event_five_stakeholder_scores(db):
+    e = mk_event(db, "senior_hiring", "s1")
+    p = mk_event(db, "partnership", "p1")
+    pol.assess_all_personas(db, [e, p])
+    sh = {a.persona_id: a.score for a in db.query(Assessment).filter_by(event_id=e.id)}
+    pa = {a.persona_id: a.score for a in db.query(Assessment).filter_by(event_id=p.id)}
+    assert set(sh) == {"ci_lead", "vc_partner", "rd_technology", "sales_marketing", "talent_recruiting"}
+    assert sh["talent_recruiting"] > sh["sales_marketing"] and pa["sales_marketing"] > pa["talent_recruiting"]
+    assert pol.why("talent", "senior_hiring") != pol.why("technology", "senior_hiring")
+
+
+def test_recruiting_feedback_scoped_and_isolated(db):
+    j = mk_event(db, "junior_hiring", "j9")
+    pol.assess_all_personas(db, [j])
+    text = "For the Talent / Recruiting lead view, prioritize junior hiring and headcount changes."
+    prop = pol.deterministic_parse(text, "vc_partner")
+    assert prop.persona_id == "talent_recruiting"
+    p = pol.create_proposal(db, "vc_partner", text, prop, "deterministic_v1")
+    assert p.state == "pending_review"
+    pol.approve(db, p.id, "bob")
+    assert pol.active(db, "talent_recruiting").version == 2
+    assert all(pol.active(db, x).version == 1 for x in pol.PERSONAS if x != "talent_recruiting")
+
+
+def test_custom_persona_file_validated(tmp_path):
+    f = tmp_path / "personas.json"
+    f.write_text(json.dumps({
+        "supply_chain": {"label": "Supply Chain Lead", "objective": "Supplier risk", "category_weights": {"partnership": 1.0}},
+        "bad_one": {"label": "Bad", "objective": "x", "category_weights": {"funding": 5}},
+    }))
+    try:
+        added = pol.load_custom_personas(f)
+        assert added == ["supply_chain"] and "bad_one" not in pol.PERSONAS
+        assert pol.PERSONAS["supply_chain"]["min_sources"] >= pol.GLOBAL_MIN_SOURCES
+    finally:
+        pol.PERSONAS.pop("supply_chain", None)

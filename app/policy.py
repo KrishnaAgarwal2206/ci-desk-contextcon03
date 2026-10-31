@@ -5,7 +5,9 @@ version. Global integrity rules below are code constants and cannot be changed
 by any proposal.
 """
 import copy
+import json
 import re
+from pathlib import Path
 from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field, field_validator
@@ -38,7 +40,59 @@ PERSONAS = {
                              "headcount_change": 0.7, "news_mention": 0.3},
         "rules": [], "alert_threshold": 0.35, "min_sources": 1,
     },
+    "rd_technology": {
+        "label": "R&D / Technology Lead",
+        "objective": "Spot competitor capability build, technical hiring and product launches that affect our roadmap.",
+        "lens": "technology",
+        "category_weights": {"leadership_change": 0.6, "funding": 0.4, "founder_move": 0.3, "gtm_expansion": 0.2,
+                             "product_launch": 1.0, "partnership": 0.7, "senior_hiring": 1.0, "junior_hiring": 0.6,
+                             "headcount_change": 0.4, "news_mention": 0.3},
+        "rules": [], "alert_threshold": 0.35, "min_sources": 1,
+    },
+    "sales_marketing": {
+        "label": "Sales / Marketing Lead",
+        "objective": "Anticipate competitor go-to-market pushes, partnerships and launches that affect deals and positioning.",
+        "lens": "commercial",
+        "category_weights": {"leadership_change": 0.5, "funding": 0.5, "founder_move": 0.2, "gtm_expansion": 1.0,
+                             "product_launch": 0.9, "partnership": 1.0, "senior_hiring": 0.4, "junior_hiring": 0.3,
+                             "headcount_change": 0.4, "news_mention": 0.6},
+        "rules": [], "alert_threshold": 0.35, "min_sources": 1,
+    },
+    "talent_recruiting": {
+        "label": "Talent / Recruiting Lead",
+        "objective": "Track competitor hiring demand, team growth and leadership churn that affect our talent market.",
+        "lens": "talent",
+        "category_weights": {"leadership_change": 0.8, "funding": 0.3, "founder_move": 0.6, "gtm_expansion": 0.6,
+                             "product_launch": 0.2, "partnership": 0.1, "senior_hiring": 1.0, "junior_hiring": 0.9,
+                             "headcount_change": 1.0, "news_mention": 0.2},
+        "rules": [], "alert_threshold": 0.35, "min_sources": 1,
+    },
 }
+
+# Personas that get LLM brief synthesis (cost/token cap). Others use labelled templates over the same evidence.
+LLM_SYNTH_PERSONAS = ("ci_lead", "vc_partner")
+CUSTOM_PERSONAS_FILE = Path(__file__).resolve().parent.parent / "config" / "personas.json"
+
+
+def load_custom_personas(path: Path = CUSTOM_PERSONAS_FILE) -> list[str]:
+    """Optional extension point: add stakeholder presets in config/personas.json (same shape as PERSONAS).
+    Entries are validated against the same bounds as proposals; invalid entries are skipped, never partially used."""
+    if not path.exists():
+        return []
+    added = []
+    for pid, body in json.loads(path.read_text(encoding="utf8")).items():
+        w = body.get("category_weights", {})
+        ok = (re.fullmatch(r"[a-z][a-z0-9_]{1,39}", pid) and body.get("label") and body.get("objective")
+              and set(w) <= set(CATEGORIES) and all(WEIGHT_MIN <= float(v) <= WEIGHT_MAX for v in w.values())
+              and THRESHOLD_MIN <= float(body.get("alert_threshold", 0.35)) <= THRESHOLD_MAX)
+        if ok and pid not in PERSONAS:
+            PERSONAS[pid] = {"label": body["label"], "objective": body["objective"], "lens": body.get("lens", "custom"),
+                             "category_weights": {c: float(w.get(c, 0.3)) for c in CATEGORIES}, "rules": [],
+                             "alert_threshold": float(body.get("alert_threshold", 0.35)),
+                             "min_sources": max(GLOBAL_MIN_SOURCES, int(body.get("min_sources", 1)))}
+            added.append(pid)
+    return added
+
 
 WHY = {  # inference templates, always labelled "inference"
     ("strategy", "product_launch"): "May signal a move into adjacent segments; check overlap with our portfolio.",
@@ -55,6 +109,18 @@ WHY = {  # inference templates, always labelled "inference"
     ("investor", "senior_hiring"): "Senior hiring indicates execution capacity being built.",
     ("investor", "headcount_change"): "Team growth rate is a momentum proxy.",
     ("investor", "product_launch"): "New product may expand addressable market.",
+    ("technology", "product_launch"): "May indicate where the competitor's roadmap is heading; compare with ours.",
+    ("technology", "senior_hiring"): "Senior technical hiring may signal a new capability being built.",
+    ("technology", "junior_hiring"): "Volume engineering hiring may indicate scaling of an existing product.",
+    ("technology", "partnership"): "Technology partnerships may close capability gaps faster than building.",
+    ("commercial", "gtm_expansion"): "GTM hiring may mean more competitive pressure in our accounts or regions.",
+    ("commercial", "partnership"): "New partners may open channels into our customer base.",
+    ("commercial", "product_launch"): "New product may change positioning in active deals; update battlecards.",
+    ("commercial", "news_mention"): "Public coverage may shape buyer perception in current deals.",
+    ("talent", "senior_hiring"): "Competing demand for senior talent in these functions; expect offer/retention pressure.",
+    ("talent", "junior_hiring"): "High-volume hiring competes for the same early-career talent pool.",
+    ("talent", "headcount_change"): "Team growth or contraction changes who is hiring and who may be available.",
+    ("talent", "leadership_change"): "Leadership churn can trigger team moves; possible hiring opportunity.",
 }
 
 
@@ -65,6 +131,7 @@ def why(lens: str, category: str) -> str:
 # ---------------- versions ----------------
 
 def ensure_presets(db):
+    load_custom_personas()
     for pid, body in PERSONAS.items():
         if not db.scalar(select(PolicyVersion).where(PolicyVersion.persona_id == pid)):
             db.add(PolicyVersion(persona_id=pid, version=1, body=copy.deepcopy(body), is_active=True, created_by="preset"))
@@ -185,6 +252,12 @@ def deterministic_parse(text: str, persona_id: str) -> PolicyProposalModel:
     t = text.lower()
     if re.search(r"\bvc\b|investor|investment partner", t):
         persona_id = "vc_partner"
+    elif re.search(r"(talent|recruiting)\s*(/\s*recruiting\s*)?(lead|team|persona|view)", t):
+        persona_id = "talent_recruiting"
+    elif re.search(r"(r&d|technology|engineering)\s*(/\s*technology\s*)?(lead|team|persona|view)", t):
+        persona_id = "rd_technology"
+    elif re.search(r"(sales|marketing)\s*(/\s*marketing\s*)?(lead|team|persona|view)", t):
+        persona_id = "sales_marketing"
     elif re.search(r"strategy|\bci\b|competitive intelligence", t):
         persona_id = "ci_lead"
     changes, asserts, cats = [], [], []
