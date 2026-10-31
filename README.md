@@ -49,6 +49,17 @@ Python · FastAPI · Pydantic v2 · HTTPX · SQLAlchemy 2 + SQLite · Jinja2 + v
 
 **LLM boundaries:** the LLM never resolves identities, calls APIs, scores events, validates or activates policy. It plans, phrases, and proposes.
 
+## Demo flow
+1. `uvicorn app.main:app --reload`, open http://127.0.0.1:8000, submit a brief (domains resolve most precisely).
+2. Request page: KPI strip → **Canonical companies** (IDs, confidence, ambiguous candidates with "use this") → **Stakeholder matrix** (the same stored event scored for five stakeholders).
+3. **Briefs**: switch stakeholder tabs; open "score breakdown"; facts vs inference are labelled; click `E#` to jump to evidence.
+4. **Governance**: submit feedback → pending proposal with diff + replay → enter reviewer name → Approve → new version for that persona only (others unchanged) → optional rollback.
+5. **Monitoring**: real watch ID, weekly schedule, 30-day SLA, baseline status; "Reconcile run history" pulls `GET /watch/company/{id}/runs`.
+6. **Trace**: every Crustdata call with `X-Credits-Used`, LLM tokens and estimated cost, stage timings, errors.
+
+## Limitations (do not claim)
+No LLM-as-a-judge stage; no alert delivery/routing (alerts are an in-app threshold flag); R&D/Sales/Recruiting insight text is template-based; no Supply Chain persona; no auth/RBAC; replay covers stored events only; no Watcher change event received yet; webhook receiver not exercised live; Person Enrich and Web Fetch not implemented. Full API-by-API status: [`DEMO_READINESS_REPORT.md`](DEMO_READINESS_REPORT.md).
+
 ## Approaches tried — what worked, what didn't
 - **Enrich `people` field group:** returned ~6.8 MB for one company and stalled the run. Dropped; **Person Search** with title filters gives leadership with far less payload.
 - **Name-only identity:** "Intercom" returned 7 and "Sierra" 12 matches all at confidence 1.0 (including Sierra the truck and Sierra Textiles). We never guess: a tie is broken only by a unique exact domain-name match, otherwise it is shown as *ambiguous* and the reviewer picks. Domains in the brief resolve exactly.
